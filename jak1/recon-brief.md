@@ -24,8 +24,10 @@ are not repeated here). Resume from them.
   whose parent is Jak, placed from Jak's joints. Tested in three sessions and across a savestate
   reload; **not yet** across a level change or respawn.
 - **Input.** Jak 1 rewrites its pad record from the controller every frame before using it:
-  `input_press` on the pad record gave one jump, then nothing, and the stick did nothing. Until
-  the `pad_inject` template ships, the player drives every action in a visible session.
+  `input_press` on the pad record gave one jump, then nothing. The `pad_inject` template now
+  exists: the retail ELF keeps its symbols, and a hook at `scePadRead`'s epilogue injected 120
+  frames that the game's own pad record showed (LOCUS live check; the hook data is in the
+  project's notes). Jak's movement under it is not measured yet: do that first.
 - **Boot.** A fresh save cannot skip the opening film (about 15 minutes to control on Geyser
   Rock). Ask the player for a save past it (the session copies their memory cards), and save a
   state as soon as Jak is controllable.
@@ -83,8 +85,8 @@ Pin an OpenGOAL commit first and record it. Then look for, and confirm live:
 ## Plan for the first sessions
 
 1. Steps 0–2 as SKILL.md: pin (including the pressing by XXH64), recon with the leads above. The
-   project already holds a savestate on Geyser Rock: start from it. A cold boot needs the player
-   at the pad until `pad_inject` exists.
+   project already holds a savestate on Geyser Rock: start from it. A cold boot can now be scripted
+   with `input_script` through the pad hook (add it to the adapter first).
 2. Step 3 by differential search first (positions are likely f32), then express what you found as
    a chain from a symbol and confirm it survives a level change and a respawn.
 3. Step 5: write the collision format description and `format_try` it on Geyser Rock's own data,

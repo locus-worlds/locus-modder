@@ -22,7 +22,7 @@ every claim; you do not need them to work.
 
 ## What runs today
 
-Checked against `locus-dev` on 9 October 2026 (PCSX2 2.8.2 and 2.9.103). Tools
+Checked against `locus-dev` on 9 October 2026 (PCSX2 2.8.2 and 2.9.103, DuckStation). Tools
 that are not built yet answer every call with "not available yet" and the reason; trust that
 answer over this table, and tell the player at the start which steps you can close.
 
@@ -30,18 +30,16 @@ answer over this table, and tell the player at the start which steps you can clo
 | --- | --- | --- |
 | 0 Pin | **runs** (`game_identify`, `adapter_validate`) | — |
 | 1 Recon | **runs** (web research outside the app) | — |
-| 2 Access | **runs**: boot, read, snapshot, `state_save`/`state_load`, `screenshot(game)` | `input_script` (menus): start from the player's own savestate (`session_start(state: <path>)`), or ask the player to drive a **visible** PCSX2 session with their own pad (its bindings are copied), then `state_save` |
-| 3 Find | **runs**: snapshot, diff, search, watch, pointer scan, disassembly, cross-references | `input_script`: try `input_press` once the input word is found (it fails where the game rewrites its pad record every frame, as Jak 1 does), else the player presses while you watch; `breakpoint` |
-| 4 Control, isolate | **signals only**: find the input word and object table; `mem_write` silencing tests | `input_route`, `adapter_try` |
-| 5 Environment | **signals only**: find the collision data, describe it in a format description, validate | `format_try`, `state_extract`, `adapter_try`, `adapter_test` |
-| 6 Presentation | **signals only**: find skeleton/mesh data | `render_preview`, `state_extract`; generic `skeleton` drawing in the world window |
-| 7–12 | **signals only**: find each field and event in memory, record evidence, write the adapter sections; the Proving Ground and dummy run (`world_*`) | `adapter_try`, `adapter_test` (the character cannot yet be loaded into the world from a draft) |
-| 13 Ready state | **partly**: cold boots and savestates | `input_script` |
-| 14 Adapter | **partly**: `adapter_write`, `adapter_validate`, evidence | `adapter_test`; publishing |
+| 2 Access | **runs**: boot, read, snapshot, savestates, `screenshot(game)`; on PCSX2, menus by `input_script` once the adapter has a `pad_inject` hook (`session_start(input: true)`) | Until the hook exists: the player's own savestate (`session_start(state: <path>)`), or the player drives a **visible** session with their pad |
+| 3 Find | **runs**: snapshot, diff, search, watch, pointer scan, disassembly, cross-references; input by `input_script` (PCSX2, with the hook) or `input_press` (where the game does not rewrite its pad record) | `breakpoint` |
+| 4 Control, isolate | **runs**: `adapter_try` joins the draft to the Proving Ground | `input_route` (routing a physical pad): the player plays in the session instead |
+| 5 Environment | **partly**: `adapter_try` writes the world as his collision on DuckStation; on PCSX2 only at launch (play), so a research session keeps the game's own ground | `format_try`, `state_extract` |
+| 6 Presentation | **signals only**: find skeleton/mesh data | `render_preview`, `state_extract`; the world window draws `mesh_stream` only, so a skinned character (`skeleton`) is not drawn yet |
+| 7–12 | **runs**: `adapter_try`, `world_spawn`, `world_scenario`, `adapter_test`, the dummy | Feel and looks need the player in a playtest; a character the world cannot draw is judged by scenarios and the player's view of the game window |
+| 13 Ready state | **runs** on PCSX2 with the pad hook (`input_script` from power-on) | — |
+| 14 Adapter | **runs**: `adapter_write`, `adapter_validate`, `adapter_test`, evidence | Publishing (the player's click) |
 
-"Signals only" means you can find and record the facts and write them into a validated draft, but
-not close the step: its closing check needs the missing tool. Mark such a step **blocked on
-<tool>** in the sheet, never done.
+A step whose closing check needs a missing tool is **blocked on <tool>** in the sheet, never done.
 
 ## Rules
 
@@ -438,7 +436,7 @@ Written against the design of 11 October 2026; checked against `locus-dev` on 9 
 
 - **Adapter 0.2 field names**: `adapter_schema` and `adapter_validate` are authoritative; where a
   technique file's example differs, follow them and note the difference.
-- **Hook templates** (`copy_on_execute`, `log_call`, `pad_inject`, `answer_query`) and the
+- **Hook templates** (`copy_on_execute` and `pad_inject` exist on PCSX2; `answer_query` not yet) and the
   connector vocabularies: `connectors` and `adapter_schema` list what each connector accepts.
 - **Proving Ground** zone and spawn names, dummy behaviours: `world_start` returns them.
 - **Format routes** (capture, format descriptions): `format_try` is not built yet.

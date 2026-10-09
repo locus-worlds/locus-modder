@@ -126,7 +126,18 @@ to expect. Facts with a `src:` are LOCUS reproduced unless marked otherwise.
   `j hook` with `move $8, $18` in the delay slot gives the caller's raw pad buffer: buttons in
   bytes 0–1, active low; left stick bytes 4–5. Inject on one socket only.
   (src: MODLOG.md, Gate 9 cont.; docs/reference/LOCUS_Master_v1.7.md §30.2)
-- **`log_call`**: not yet used in a shipped integration; polling a table was enough for sound.
+- **Finding a `pad_inject` site for a new game** (9 October, Jak 1): find the SDK pad read
+  (`scePadRead` / `scePad2Read`; a retail ELF sometimes keeps its symbol table, else
+  `code_xrefs` to the pad buffer the game reads). Hook its epilogue (`ld ra … jr ra`): fill the
+  adapter's `pad_inject` with `pc` and `expect` (the word there), the `original` words it replaces
+  up to and including the delay slot, which register holds the buffer and the bytes read
+  (`buffer`, `count`), where the port is (a register or a word of the buffer), the `layout`
+  offsets of buttons and sticks, and `storage` (4 KB aligned, 0x1040 bytes) in a range that is
+  zero in your states, declared as a writable region. Then `session_start(input: true)` and one
+  `input_script` step while `mem_watch` reads the game's own pad record. Record that the storage
+  range stayed zero over a long session before trusting it.
+  (src: docs/core/m1-pcsx2-generic.md "Input")
+- **`log_call`**: not built; polling a table was enough for sound.
 
 ## Observe, don't time
 
