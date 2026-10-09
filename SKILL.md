@@ -20,6 +20,29 @@ For Jak and Daxter start with [jak1/recon-brief.md](jak1/recon-brief.md).
 `src:` notes cite records in the LOCUS repository (paths from its root). They let reviewers trace
 every claim; you do not need them to work.
 
+## What runs today
+
+Checked against `locus-dev` on 9 October 2026 (PCSX2 2.8.2 and 2.9.103). Tools
+that are not built yet answer every call with "not available yet" and the reason; trust that
+answer over this table, and tell the player at the start which steps you can close.
+
+| Step | Today | Missing for the rest |
+| --- | --- | --- |
+| 0 Pin | **runs** (`game_identify`, `adapter_validate`) | — |
+| 1 Recon | **runs** (web research outside the app) | — |
+| 2 Access | **runs**: boot, read, snapshot, `state_save`/`state_load`, `screenshot(game)` | `input_script` (menus): start from the player's own savestate (`session_start(state: <path>)`), or ask the player to drive a **visible** PCSX2 session with their own pad (its bindings are copied), then `state_save` |
+| 3 Find | **runs**: snapshot, diff, search, watch, pointer scan, disassembly, cross-references | `input_script`: use `input_press` once the input word is found, or ask the player to press while you watch; `breakpoint` |
+| 4 Control, isolate | **signals only**: find the input word and object table; `mem_write` silencing tests | `input_route`, `adapter_try` |
+| 5 Environment | **signals only**: find the collision data, describe it in a format description, validate | `format_try`, `state_extract`, `adapter_try`, `adapter_test` |
+| 6 Presentation | **signals only**: find skeleton/mesh data | `render_preview`, `state_extract`; generic `skeleton` drawing in the world window |
+| 7–12 | **signals only**: find each field and event in memory, record evidence, write the adapter sections; the Proving Ground and dummy run (`world_*`) | `adapter_try`, `adapter_test` (the character cannot yet be loaded into the world from a draft) |
+| 13 Ready state | **partly**: cold boots and savestates | `input_script` |
+| 14 Adapter | **partly**: `adapter_write`, `adapter_validate`, evidence | `adapter_test`; publishing |
+
+"Signals only" means you can find and record the facts and write them into a validated draft, but
+not close the step: its closing check needs the missing tool. Mark such a step **blocked on
+<tool>** in the sheet, never done.
+
 ## Rules
 
 1. **The app is the only door to the game.** Never launch an emulator, open a PINE or GDB socket,
@@ -85,6 +108,9 @@ artefact ids, and what was **not** tested. Format: [templates/evidence-record.md
    runs without a project folder, since a local server is registered for one folder only), then
    start a new session: MCP servers load when a session starts. The player may allow the `locus-dev` tools in Claude Code's permissions so they
    are not asked for every call; the app's own approvals still apply.
+   **Approvals**: a call that needs one (session start, memory writes) fails with the request id
+   (`apr-N`). The player either presses **Allow** in Workbench ▸ the project, or you ask
+   `ask_player(kind: confirm, approval: "apr-N", question: …)` and their yes grants it.
 2. `system_info`, `runtimes`, `connectors`: record OS, CPU architecture, emulator version and
    architecture, connector version and its **vocabulary** (field types, object tables, hook
    templates, write operations, savestate parts, console decoders, presentation kinds). The adapter
@@ -94,9 +120,16 @@ artefact ids, and what was **not** tested. Format: [templates/evidence-record.md
    costs days (Ratchet's 20-hour budget ran over three days); later games on the same engine are
    faster. At the budget, report continue / change route / stop. Ask when they want to be called
    to play or listen. (src: docs/reference/LOCUS_Master_v1.7.md §23)
-5. Where files go: the adapter JSON, its `formats/` and `tests/` live in the Workbench project
-   (its Adapter page shows where; use a write tool if the interface offers one; provisional). They
-   hold facts only.
+5. Where files go: the adapter and its format descriptions are written **only** with
+   `adapter_write` (it writes `adapter/package.json` and `adapter/formats/<name>.json` in the
+   project and validates). Before writing, call `adapter_schema`: it returns a complete adapter
+   that validates (Spyro), the section names, the JSON Schema per `section`, and each connector's
+   vocabulary. Copy the shape, not the values. They hold facts only.
+6. **Questions to the player**: ask how they want to answer. **App** (default): `ask_player` /
+   `request_playtest`, answered in Workbench ▸ the project; the app records the answer. **Chat**:
+   ask in this conversation; record each reply verbatim with `evidence_record` (claim "player
+   answered in chat: …", the question, what they played) and in the sheet as "player (chat)". A
+   step closed on a chat answer says so. Never answer for them.
 
 **Resuming** a project in a new conversation: read the investigation sheet, the step list and the
 last evidence records before any call; do not trust memory of earlier sessions.
@@ -113,7 +146,9 @@ closing check is in the app's record.
   the build public research targets (Spyro was switched from PAL to US for this; for Jak, OpenGOAL
   targets NTSC-U SCUS-97124) and confirm with `ask_player(choice)`.
 - **Record**: serial (SYSTEM.CNF), region, version, image SHA-1 and SHA-256, boot executable name,
-  size, CRC and SHA-256; emulator version and architecture.
+  size, CRC and SHA-256 (`game_identify` returns all of them); emulator version and architecture.
+- A file name's "Rev 1" and SYSTEM.CNF's `VER` are different labels (Jak's Rev 1 image says
+  `VER = 1.00`). Pin by the hashes; record both labels as they are.
 - **Closed by**: fingerprints in `source.builds[]` and `adapter_validate` passing on the identity.
 - Every address differs between regions and revisions; a serial alone does not pin a revision.
   (src: investigations/spyro1-duckstation.md S0; investigations/ratchet.md target sheet)
@@ -129,8 +164,13 @@ closing check is in the app's record.
 
 ### 2 Access
 
-- **Do**: `session_start(runtime, game, {visible: false})` with no state (a fresh boot). If it
-  fails for want of a BIOS, the player sets one in their emulator; you never handle BIOS files.
+- **Do**: `session_start(runtime, game, {visible: false})` with no state (a fresh boot). It
+  returns only when the emulator's memory interface answers; otherwise it stops the emulator and
+  says why (the settings file it loaded, its last log lines). If it fails for want of a BIOS, the
+  player sets one in their emulator and quits it completely (⌘Q) so it saves; you never handle
+  BIOS files. PCSX2 must be 2.7 or newer (LOCUS tests 2.9.103; 2.8.2 works): an older one is
+  refused, and the player updates it. A session refuses to start beside another copy of the same
+  emulator: ask the player to quit it (`allow_other_emulator: true` only if they say it must stay).
   Drive the menus with `input_script`, waiting on what you observe (`screenshot(game)`,
   `session_log`, later a frame counter) rather than fixed delays; prompts can ignore input for
   about 3 s. Reach the first controllable moment, `state_save("research-start")`. Measure hidden game frames per second
@@ -356,7 +396,7 @@ may rename some. Use the mapping you recorded before step 0.
 | 11 Others solid | `world_dummy(walk_path)`, `adapter_try`, `bus_trace` | `adapter_test` |
 | 12 Sound | `mem_watch`, `disc_read`, `state_extract(spu)`, `format_try`, `bus_trace` | scenario, `ask_player(play_and_report)` |
 | 13 Ready state | `session_stop`, `session_start`, `input_script`, `state_save`, `adapter_try` | two cold runs, `adapter_test` |
-| 14 Adapter | `adapter_validate`, `adapter_test`, `request_playtest`, `evidence_record` | scenarios + player |
+| 14 Adapter | `adapter_schema`, `adapter_write`, `adapter_validate`, `adapter_test`, `request_playtest`, `evidence_record` | scenarios + player |
 | Any | `evidence_record`, `notes_append`, `world_reset`, `session_stop` | — |
 
 ## Files
@@ -366,20 +406,18 @@ may rename some. Use the mapping you recorded before step 0.
 | [playbooks/pcsx2.md](playbooks/pcsx2.md), [playbooks/duckstation.md](playbooks/duckstation.md) | Emulator behaviour, savestates, hooks, sound hardware |
 | [pitfalls.md](pitfalls.md) | Every trap met so far: symptom, cause, check |
 | [techniques/](techniques/) | How to do steps 3–13 |
-| [templates/](templates/) | Investigation sheet, evidence record, adapter skeleton, scenarios, final report |
+| [templates/](templates/) | Investigation sheet, evidence record, scenarios, final report (the adapter shape comes from `adapter_schema`) |
 | [field-notes/](field-notes/) | Mario, Ratchet, Spyro as they were done |
 | [jak1/recon-brief.md](jak1/recon-brief.md) | Starting brief for Jak and Daxter (inference, to verify) |
 
 ## Provisional
 
-Written against the design of 11 October 2026, before these parts exist. Check them first and
-note differences:
+Written against the design of 11 October 2026; checked against `locus-dev` on 9 October 2026.
+[What runs today](#what-runs-today) lists the tools still missing. Still provisional:
 
-- **Tool names and arguments** (design §3.1): `crates/locus-dev` is being built.
-- **Adapter 0.2 field names** (design §5): provisional until `crates/locus-package` 0.2 and its
-  schema land; [the skeleton](templates/adapter-0.2-skeleton.jsonc) marks them.
-- **Hook template names** (`copy_on_execute`, `log_call`, `pad_inject`, and an *answer* template
-  not yet named) and the connector vocabularies (design §5.1).
-- **Proving Ground** zone and spawn names, dummy behaviours and the scenario format (design §6),
-  milestone M3.
-- **Format routes** (capture, format descriptions): unproven until milestone M1.
+- **Adapter 0.2 field names**: `adapter_schema` and `adapter_validate` are authoritative; where a
+  technique file's example differs, follow them and note the difference.
+- **Hook templates** (`copy_on_execute`, `log_call`, `pad_inject`, `answer_query`) and the
+  connector vocabularies: `connectors` and `adapter_schema` list what each connector accepts.
+- **Proving Ground** zone and spawn names, dummy behaviours: `world_start` returns them.
+- **Format routes** (capture, format descriptions): `format_try` is not built yet.

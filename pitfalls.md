@@ -41,6 +41,15 @@ Symptom: the game stays at the same PC. Cause: in PCSX2's debugger, System ▸ P
 current breakpoint, and the first Run after loading a state stops at the same PC. Check: verify
 progress by the frame counter, never by a button's state. (src: docs/ratchet/02-collision/ratchet-native-floor-result.md)
 
+**7a. PCSX2 starts but its memory interface never answers.**
+Symptom: `session_start` waits, then reports no answer; the hidden PCSX2 sat at its setup wizard
+or "no BIOS". Cause (Jak, 9 October): PCSX2 2.x with `-datapath P` reads its settings from
+`P/PCSX2`, so a profile copied to the wrong level ran on defaults (no BIOS, PINE off); PCSX2 2.6
+rejects `-datapath`; a BIOS chosen while PCSX2 is still open is not saved yet. Check: the result's
+diagnosis names the settings file PCSX2 loaded; PCSX2 2.7+; the player quits PCSX2 (⌘Q) after
+choosing a BIOS. Fixed in `locus-dev` the same day; if it recurs, report the diagnosis to the
+player rather than working around it. (src: crates/locus-dev/src/session.rs)
+
 ## Finding fields (step 3)
 
 **8. A guessed byte with two meanings.**

@@ -15,6 +15,13 @@ to expect. Facts with a `src:` are LOCUS reproduced unless marked otherwise.
 
 ## Profile (what `session_start` builds)
 
+- Research sessions (`locus-dev`): the player's PCSX2 folder is copied to
+  `<session>/profile/PCSX2` and PCSX2 is started with `-datapath <session>/profile` (2.x reads
+  its data from `<datapath>/PCSX2`). Only `inis/PCSX2.ini` is edited: PINE on with the session's
+  slot, a relative BIOS folder made absolute, muted, hidden renderer as below. PCSX2 older than 2.7
+  is refused. (src: crates/locus-dev/src/session.rs)
+- Play sessions (the connector), as follows.
+
 - A copy of the player's profile under the run folder, started with `-datapath <run>` and
   `-statefile <state>` when resuming. Keys forced once each: `PINESlot` (one slot per session),
   `StartPaused = false`, `TogglePause = Keyboard/P`, memory-card folders inside the run (fresh,
