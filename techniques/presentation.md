@@ -28,8 +28,37 @@ comes from; it never carries a decoder.
    with the next vertex's encoding selected by a low bit. If the description language cannot
    express a format, that is a missing generic building block: record it, tell the player.
 
-Both routes are unproven until milestone M1 (Spyro's model captured and described, compared with
-the known decoder). (src: docs/core/locus-modder-design-2026-10-11.md §5.2; investigations/spyro1-duckstation.md S6)
+Route 2 is proven on Spyro (his model description gives what the known decoder gives on his real
+RAM); route 1 is not yet. Check a description with `format_try` on a snapshot or an extracted state
+before the adapter uses it: record counts (animations, frames, vertices, faces) and the vertex
+bounds should match what you know of him (his size in game units), and `preview: true` saves the
+points or triangles as an OBJ in the project. Records carry integer fields and real fields:
+`{"f32": addr}`, `{"f16": addr}`, `{"fixed": [e, frac_bits]}` (PS1 4.12 is 12); reals are values
+only (no arithmetic, no conditions: test a float by reading its bytes as `u32`). (src: docs/core/m1-format-routes.md; docs/core/state-extract-format-try.md; docs/core/jak-followups-2026-10-09.md)
+
+**A described skeleton model becomes a skin.** Add a `mesh` section beside the decoder, naming
+which records are what (configuration only):
+
+```json
+"mesh": {
+  "vertex": { "record": "vertex", "position": ["x", "y", "z"], "scale": "scale",
+              "normal": ["nx", "ny", "nz"], "uv": ["u", "v"], "joints": ["j0", "j1"], "weights": ["w0", "w1"] },
+  "face": { "record": "face", "indices": ["a", "b", "c"] },
+  "submesh": { "record": "fragment" },
+  "joint": { "record": "joint", "inverse_bind": ["m0", "…", "m15"], "order": "row_major" }
+}
+```
+
+Vertices and faces belong to the latest `submesh` record before them (or name one with a
+`submesh` field); face indices count from the submesh's first vertex (`"from": "all"`: across
+every vertex); `scale` is a number or a field of the vertex or its submesh (merc-style per-fragment
+scales); weights are normalised; normals are computed from the faces when not given; inverse binds
+come from the joint records (give them when the game's joint matrices are joint-to-world, not
+skinning palettes). `format_try` reports the skin it builds (joints, vertices, triangles,
+submeshes, bounds) or the record and field that did not fit, and `preview: true` saves
+`previews/f<N>.lskin` (the `skeleton` model file) and an OBJ. Not yet: textures (the console's
+texture decoder), triangle strips and quads (emit triangles), and pointing an adapter's
+presentation at a described skin (today only a local export is drawn).
 
 Where the model lives: in RAM for the current level (Spyro's `g_Models[0]`; animations the level
 loaded), or on the disc (Ratchet's model was exported once with the Wrench tool from the disc: a
@@ -49,7 +78,7 @@ class and scale of the owner). (src: investigations/spyro1-duckstation.md S8; do
 ## Textures
 
 Video memory has the same layout for every game on a console, so the connector decodes it:
-PS1 VRAM from a savestate (`state_extract(state, "vram")`: Spyro's faces use one 4-bit page at
+PS1 VRAM from a savestate (`state_extract(parts: ["vram"])`: Spyro's faces use one 4-bit page at
 (960, 256) with 17 CLUT variants, cropped to 578 × 32 used texels); PS2 GS memory (connector
 vocabulary, design §5.1). The adapter gives pages, CLUTs and which faces use which.
 (src: investigations/spyro1-duckstation.md S6, S8)
@@ -68,7 +97,9 @@ vocabulary, design §5.1). The adapter gives pages, CLUTs and which faces use wh
 
 ## Checks
 
-- `render_preview(model, animation, frame)` beside `screenshot(game)` of the same frame: parts
+- `adapter_try(model: <the player's export folder>)` on PCSX2 draws him in the research world as
+  play does (kind `skeleton`); the result's notes say "drawn: …" or why not.
+- `render_preview(model, animation, frame)` (not built yet) beside `screenshot(game)` of the same frame: parts
   attached (head, tail), symmetry, colours, texture placement, decals (pitfall 29).
 - Head and part turning: render with a part turned (Spyro: head turned 45°).
 - Scale against the 1.8 m pole and the Ratchet silhouette; the player decides.

@@ -31,11 +31,11 @@ answer over this table, and tell the player at the start which steps you can clo
 | 0 Pin | **runs** (`game_identify`, `adapter_validate`) | — |
 | 1 Recon | **runs** (web research outside the app) | — |
 | 2 Access | **runs**: boot, read, snapshot, savestates, `screenshot(game)`; on PCSX2, menus by `input_script` once the adapter has a `pad_inject` hook (`session_start(input: true)`) | Until the hook exists: the player's own savestate (`session_start(state: <path>)`), or the player drives a **visible** session with their pad |
-| 3 Find | **runs**: snapshot, diff, search, watch, pointer scan, disassembly, cross-references; input by `input_script` (PCSX2, with the hook) or `input_press` (where the game does not rewrite its pad record) | `breakpoint` |
+| 3 Find | **runs**: snapshot, diff, search, watch, pointer scan, disassembly, cross-references; input by `input_script` (PCSX2, with the hook) or `input_press` (where the game does not rewrite its pad record); the same reads from a savestate without the emulator (`state_extract` makes a snapshot of it) | `breakpoint` |
 | 4 Control, isolate | **runs**: `adapter_try` joins the draft to the Proving Ground | `input_route` (routing a physical pad): the player plays in the session instead |
-| 5 Environment | **partly**: `adapter_try` writes the world as his collision on DuckStation; on PCSX2 only at launch (play), so a research session keeps the game's own ground | `format_try`, `state_extract` |
-| 6 Presentation | **signals only**: find skeleton/mesh data | `render_preview`, `state_extract`; the world window draws `mesh_stream` only, so a skinned character (`skeleton`) is not drawn yet |
-| 7–12 | **runs**: `adapter_try`, `world_spawn`, `world_scenario`, `adapter_test`, the dummy | Feel and looks need the player in a playtest; a character the world cannot draw is judged by scenarios and the player's view of the game window |
+| 5 Environment | **runs**: `format_try` checks your collision description on the level's own data (decoders; `cell_tree` trees read back from their root); `adapter_try` writes the world as his collision on DuckStation; on PCSX2 substitution is written only at launch (play), so a research session keeps the game's own ground, but the **answer route** (`answer_query` cache form, route `answer_query`) answers the game's collision cache from the world in a running session (`session_start(hooks: true)`, then `adapter_try`) | — |
+| 6 Presentation | **partly**: the world window draws `skeleton` characters; `adapter_try` (PCSX2) draws the trial character from the player's export (`model`), as play does; `format_try` checks a model description (integer and `f32`/`f16`/fixed-point fields), and with a `mesh` section builds it into a `locus-skin-1` skin (`preview: true` saves it and an OBJ); `state_extract` gives video and sound memory | `render_preview`; textures for a described skin (the console texture decoder); an adapter cannot yet point its presentation at a described skin (only at a local export), so a described character is not drawn in the world yet |
+| 7–12 | **runs**: `adapter_try`, `world_spawn`, `world_scenario`, `adapter_test`, the dummy; damage by bounded writes, or on PCSX2 through the game's own function call (`call_function` hook, `call` write: techniques/damage.md); sound from a game's table of playing sounds (PCSX2, DuckStation) or, on PCSX2, from a sound command buffer (vocabulary 0.5), samples from 989snd banks on the disc (by number or by name) | Feel, looks and sound need the player in a playtest; a character the world cannot draw is judged by scenarios and the player's view of the game window. A copy hook at a sound buffer's send point (no polling) is designed, not built |
 | 13 Ready state | **runs** on PCSX2 with the pad hook (`input_script` from power-on) | — |
 | 14 Adapter | **runs**: `adapter_write`, `adapter_validate`, `adapter_test`, evidence | Publishing (the player's click) |
 
@@ -124,7 +124,8 @@ artefact ids, and what was **not** tested. Format: [templates/evidence-record.md
 5. Where files go: the adapter and its format descriptions are written **only** with
    `adapter_write` (it writes `adapter/package.json` and `adapter/formats/<name>.json` in the
    project and validates). Before writing, call `adapter_schema`: it returns a complete adapter
-   that validates (Spyro), the section names, the JSON Schema per `section`, and each connector's
+   that validates (Spyro) with the format descriptions it names (`formats`, as `adapter_write`
+   takes them), the section names, the JSON Schema per `section`, and each connector's
    vocabulary. Copy the shape, not the values. They hold facts only.
 6. Read [Working with the player](#working-with-the-player) before the first session.
 
@@ -209,7 +210,10 @@ Technique: [techniques/differential-search.md](techniques/differential-search.md
   chain from a static root or symbol, `mem_pointer_scan`). Inject input with `input_script`, take
   `mem_snapshot`s around it, narrow with `mem_diff` and `mem_search`, confirm with `mem_watch`.
 - **Record**: per field: address or chain, type, units, axes and signs, value per action,
-  evidence, two independent confirmations.
+  evidence, two independent confirmations. Facing may be an angle, a direction (`vec3_*`) or a
+  rotation (`quat_f32` with `"facing": {"forward": …}`, vocabulary 0.4): prefer the one that is
+  set when the character stands still, and check it with a `facing` scenario expectation
+  (`toward: motion`, or a `heading_deg`).
 - **Closed by**: in a **second session** (fresh boot or the state) with a different input script, a
   `mem_watch` trace in which every field follows the injected input. After step 5, the `spawn-idle`
   scenario reads them through the adapter.
@@ -260,7 +264,7 @@ Technique: [techniques/presentation.md](techniques/presentation.md).
 - **Do**: choose the kind (`skeleton`, `morph`, `mesh_stream`). Route 1: capture what the game's
   renderer decodes (`copy_on_execute` where vertices or bone matrices go to the hardware). Route 2:
   a format description of the model. Pose from polled animation fields or a captured bone palette.
-  Textures from video memory (`state_extract(state, "vram")`). List which animations this level
+  Textures from video memory (`state_extract(parts: ["vram"])`). List which animations this level
   has loaded. Compare `render_preview(model, animation, frame)` with `screenshot(game)` of the same
   frame.
 - **Record**: kind, hook sites, layouts, animations loaded in this level, texture pages.
@@ -274,7 +278,13 @@ Technique: [techniques/presentation.md](techniques/presentation.md).
 - **Do**: find the game camera (a matrix or position and target a few metres from him, forward
   axis toward him, orthonormal; it must change when only the camera moves) and declare
   `presentation.camera.kind = "captured"`; otherwise declare a LOCUS camera. His stick is relative
-  to the camera his game thinks it has, so a captured camera must be the one shown.
+  to the camera his game thinks it has, so a captured camera must be the one shown. A captured
+  camera is published as his `view` (`bus_tail` topic `locus.view`), so a scenario can expect
+  `{"facing": {"toward": "camera", "tolerance_deg": …}}`. On PCSX2 the camera field must be a
+  `mat4_f32` whose rows are forward, left, up, then the position (Ratchet's); on DuckStation a
+  `mat3_i16` view matrix and `vec3_i32` position (`captured.view`, Spyro's). Other layouts (Jak's
+  `math-camera`) cannot be declared yet: say so, and judge the camera with `heading_deg` read by
+  hand.
 - **Closed by**: the `camera-forward` scenario, and a playtest with the question "do the
   stick directions feel right?". Record the field of view if found (Ratchet's is not matched).
 
@@ -330,9 +340,11 @@ Technique: [techniques/damage.md](techniques/damage.md).
 Technique: [techniques/sound.md](techniques/sound.md).
 
 - **Do**: identify the sound library (strings in memory). Find the game's channel or voice table
-  (slots with sound id, owner object, state, position); follow it by polling, writing nothing.
+  (slots with sound id, owner object, state, position), or the command buffer it sends its sound
+  requests through every frame (records with a request id, a sound name or number, a position);
+  follow it by polling, writing nothing.
   Publish only slots owned by him, his items and companions. Samples come from the disc or from
-  sound memory in a savestate (`state_extract(state, "spu")`), described as data and decoded by the
+  sound memory in a savestate (`state_extract(parts: ["spu"])`), described as data and decoded by the
   connector. Label sound ids by the action that plays them.
 - **Closed by**: `sound-triggers` (a jump gives his jump id within 0.5 s in `bus_trace`), then
   the player's report: "Jump, attack, let the dummy hit you: do you hear his jump, swing
@@ -404,16 +416,16 @@ may rename some. Use the mapping you recorded before step 0.
 | 0 Pin | `game_identify`, `disc_list`, `runtimes` | `adapter_validate` |
 | 1 Recon | web search (outside the app), `disc_list`, `disc_read`, `notes_append` | player's yes |
 | 2 Access | `session_start`, `input_script`, `screenshot(game)`, `session_log`, `session_status`, `state_save`, `state_load` | second session loads the state |
-| 3 Find | `mem_snapshot`, `mem_diff`, `mem_search`, `mem_watch`, `mem_pointer_scan`, `mem_read`, `input_script`, `code_disassemble`, `code_xrefs`, `breakpoint` (DuckStation only) | `mem_watch` in a second session |
+| 3 Find | `mem_snapshot`, `mem_diff`, `mem_search`, `mem_watch`, `mem_pointer_scan`, `mem_read`, `input_script`, `code_disassemble`, `code_xrefs`, `state_extract`, `breakpoint` (DuckStation only) | `mem_watch` in a second session |
 | 4 Control, isolate | `input_route`, `input_press`, `mem_read`, `mem_write`, `adapter_try` | `world_scenario`, player's report |
 | 5 Environment | `format_try`, `disc_read`, `state_extract`, `adapter_try`, `world_start(proving_ground)`, `world_spawn` | `adapter_test` |
-| 6 Presentation | `state_extract`, `code_disassemble`, `render_preview`, `screenshot` | player's yes |
-| 7 Camera | `mem_search`, `mem_watch`, `adapter_try` | scenario, playtest in chat |
+| 6 Presentation | `state_extract`, `format_try`, `code_disassemble`, `render_preview`, `screenshot` | player's yes |
+| 7 Camera | `mem_search`, `mem_watch`, `adapter_try`, `bus_tail(topics: ["locus.view"])` | scenario (`facing: toward camera`), playtest in chat |
 | 8 Items | `mem_read`, `mem_watch`, `adapter_try` | scenarios, player's report |
 | 9 Attacks | `input_script`, `mem_watch`, `world_dummy(stand)`, `bus_tail`, `bus_trace` | `adapter_test`, playtest in chat |
 | 10 Hurt | `world_dummy(attack_*)`, `mem_watch`, `bus_trace`, `adapter_try` | `adapter_test`, player's report |
 | 11 Others solid | `world_dummy(walk_path)`, `adapter_try`, `bus_trace` | `adapter_test` |
-| 12 Sound | `mem_watch`, `disc_read`, `state_extract(spu)`, `format_try`, `bus_trace` | scenario, player's report |
+| 12 Sound | `mem_watch`, `disc_read`, `state_extract(parts: ["spu", "iop"])`, `format_try`, `bus_trace` | scenario, player's report |
 | 13 Ready state | `session_stop`, `session_start`, `input_script`, `state_save`, `adapter_try` | two cold runs, `adapter_test` |
 | 14 Adapter | `adapter_schema`, `adapter_write`, `adapter_validate`, `adapter_test`, `evidence_record` (playtest in chat) | scenarios + player |
 | Any | `evidence_record`, `notes_append`, `world_reset`, `session_stop` | — |
@@ -436,7 +448,11 @@ Written against the design of 11 October 2026; checked against `locus-dev` on 9 
 
 - **Adapter 0.2 field names**: `adapter_schema` and `adapter_validate` are authoritative; where a
   technique file's example differs, follow them and note the difference.
-- **Hook templates** (`copy_on_execute` and `pad_inject` exist on PCSX2; `answer_query` not yet) and the
+- **Hook templates** (`copy_on_execute`, `pad_inject`, `call_function` and `answer_query`'s cache form exist on PCSX2) and the
   connector vocabularies: `connectors` and `adapter_schema` list what each connector accepts.
 - **Proving Ground** zone and spawn names, dummy behaviours: `world_start` returns them.
-- **Format routes** (capture, format descriptions): `format_try` is not built yet.
+- **Format routes** (capture, format descriptions): `format_try` checks decoders and `cell_tree`
+  trees against the game's bytes; a `triangle_grid` builder is checked through the decoder that
+  reads its tables back. Records hold integer fields and real fields (`f32`, `f16`, fixed point:
+  values only, no floating-point arithmetic; test a float by reading its bytes as `u32`). A
+  decoder's `mesh` section names which records are a skinned mesh (`format_try` builds the skin).

@@ -88,9 +88,11 @@ to expect. Facts with a `src:` are LOCUS reproduced unless marked otherwise.
 
 ## Savestates
 
-- `.p2s` files are zip archives using a compression `unzip` cannot read; `state_extract` handles
-  them. Parts: `eeMemory.bin` (32 MB EE RAM), `iopMemory.bin` (IOP RAM: 989snd banks and strings),
-  `SPU2.bin` (sound memory). (src: docs/reference/LOCUS_Master_v1.7.md §30.2; docs/ratchet/06-sound/ratchet-sound-2026-10-11.md)
+- `.p2s` files are zip archives using a compression `unzip` cannot read (zstd); `state_extract`
+  handles them. Parts: `ram` (EE RAM, 32 MB), `iop` (IOP RAM: 989snd banks and strings),
+  `scratchpad`, `vram` (GS local memory, 4 MB) and `spu` (SPU2 sound RAM, 2 MB), the last two cut
+  from PCSX2's GS and SPU2 blocks. It also makes a snapshot, so the memory and code tools read the
+  state without a session. (src: docs/reference/LOCUS_Master_v1.7.md §30.2; docs/ratchet/06-sound/ratchet-sound-2026-10-11.md)
 - A state captures everything: objects, collision, hooks you installed. A "play state" is built
   from a ready state by installing, then saving. Never distribute a state; step 13 rebuilds it on
   each machine.
@@ -137,6 +139,20 @@ to expect. Facts with a `src:` are LOCUS reproduced unless marked otherwise.
   `input_script` step while `mem_watch` reads the game's own pad record. Record that the storage
   range stayed zero over a long session before trusting it.
   (src: docs/core/m1-pcsx2-generic.md "Input")
+- **`answer_query`, cache form** (9 October, Jak 1; vocabulary 0.5): LOCUS's world answered at the
+  entry of the routine that fills the game's collision cache. `session_start(hooks: true)` puts
+  it in the session's guest patch with every other hook the adapter declares (pad, call), one
+  group; `adapter_try` keeps its buffer. What to find is in [the collision technique](../techniques/collision.md#answer-hook-when-substitution-does-not-fit).
+  (src: docs/core/jak-collision-answer-2026-10-09.md)
+- **Hooks in code loaded later** (a heap engine, an overlay): the answer template writes its
+  site's two words with **conditional** patch lines (PCSX2 extended `E` codes: each half-word must
+  still hold the game's own word), so nothing is written there before the routine is loaded and
+  nothing after it is patched. Conditional lines skip only extended lines, never `word` lines.
+  Checked live: the site read `j hook` after a state load. (src: docs/core/jak-collision-answer-2026-10-09.md)
+- **Buffers in a heap's free tail**: when no static range is free, a heap's unused tail can hold
+  a buffer if the hook and LOCUS both check the heap's pointers first (`admit`: its `current` at
+  most the buffer's start, its `top` at least the buffer's end) and fall back to the game's own
+  routine when they fail. Record the pointers before and after a long session.
 - **`log_call`**: not built; polling a table was enough for sound.
 
 ## Observe, don't time
