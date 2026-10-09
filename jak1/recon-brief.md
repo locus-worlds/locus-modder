@@ -1,10 +1,39 @@
 # Jak and Daxter: The Precursor Legacy: recon brief
 
-**Everything here is inference to verify.** Nothing about Jak 1 has been observed by LOCUS. The
+**The first section is what LOCUS observed; everything after it is inference to verify.** The
 table comes from the design's acid-test section and the Master brief; the leads below it come from
 general knowledge of the OpenGOAL project and are not in any LOCUS record. Treat each as a
 question for step 1, label it `inference` in the sheet, and replace it with what you observe.
 (src: docs/core/locus-modder-design-2026-10-11.md §9; docs/reference/LOCUS_Master_v1.7.md §36.5)
+
+## What the first two sessions established (9 October 2026)
+
+Observed through the app in the player's project (its notes and evidence hold the addresses; they
+are not repeated here). Resume from them.
+
+- **Pressing.** SCUS-97124 covers two US pressings with the same serial and boot ELF name.
+  OpenGOAL tells them apart by XXH64 (seed 0) of the whole boot ELF: `ntsc_v1`, the "black
+  label" (7280758013604870207), and `ntsc_v2` (744661860962747854). `game_identify` now returns
+  `boot_executable.xxh64`; compare it in decimal with OpenGOAL's `extractor_iso_database()`
+  (decompiler/extractor/extractor_util.cpp, ISC, commit efb21c3e). The player's "(Rev 1)" image
+  is `ntsc_v2`. (src: owner's Jak sessions, 9 October 2026)
+- **Route to Jak.** The GOAL symbol table route works: from a name string, the word pointing at it,
+  then the symbol 0xFF38 bytes earlier; `*target*` leads to Jak's process, its control block
+  (position, quaternion, ground flags), its state object (state names readable), its fact record
+  (health) and joint control. Distance is 4096 units per metre. Daxter is a `sidekick` process
+  whose parent is Jak, placed from Jak's joints. Tested in three sessions and across a savestate
+  reload; **not yet** across a level change or respawn.
+- **Input.** Jak 1 rewrites its pad record from the controller every frame before using it:
+  `input_press` on the pad record gave one jump, then nothing, and the stick did nothing. Until
+  the `pad_inject` template ships, the player drives every action in a visible session.
+- **Boot.** A fresh save cannot skip the opening film (about 15 minutes to control on Geyser
+  Rock). Ask the player for a save past it (the session copies their memory cards), and save a
+  state as soon as Jak is controllable.
+- **Speed.** Idle on Geyser Rock runs at full speed (60 game frames per second) on PCSX2 2.8.2
+  under Rosetta on an M3 Pro, hidden or visible. The player's PCSX2 used the software renderer
+  and a maximised 4K window, and saw 50–60 % while moving; research sessions now use the
+  hardware renderer. Measure speed while Jak moves (the frame counter under `*display*`) and
+  record it.
 
 ## Setting
 
@@ -53,8 +82,9 @@ Pin an OpenGOAL commit first and record it. Then look for, and confirm live:
 
 ## Plan for the first sessions
 
-1. Steps 0–2 as SKILL.md: pin, recon with the leads above, a hidden cold boot to Geyser Rock with
-   injected input (record every prompt, including memory-card ones with fresh empty cards).
+1. Steps 0–2 as SKILL.md: pin (including the pressing by XXH64), recon with the leads above. The
+   project already holds a savestate on Geyser Rock: start from it. A cold boot needs the player
+   at the pad until `pad_inject` exists.
 2. Step 3 by differential search first (positions are likely f32), then express what you found as
    a chain from a symbol and confirm it survives a level change and a respawn.
 3. Step 5: write the collision format description and `format_try` it on Geyser Rock's own data,

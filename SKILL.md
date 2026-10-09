@@ -31,7 +31,7 @@ answer over this table, and tell the player at the start which steps you can clo
 | 0 Pin | **runs** (`game_identify`, `adapter_validate`) | — |
 | 1 Recon | **runs** (web research outside the app) | — |
 | 2 Access | **runs**: boot, read, snapshot, `state_save`/`state_load`, `screenshot(game)` | `input_script` (menus): start from the player's own savestate (`session_start(state: <path>)`), or ask the player to drive a **visible** PCSX2 session with their own pad (its bindings are copied), then `state_save` |
-| 3 Find | **runs**: snapshot, diff, search, watch, pointer scan, disassembly, cross-references | `input_script`: use `input_press` once the input word is found, or ask the player to press while you watch; `breakpoint` |
+| 3 Find | **runs**: snapshot, diff, search, watch, pointer scan, disassembly, cross-references | `input_script`: try `input_press` once the input word is found (it fails where the game rewrites its pad record every frame, as Jak 1 does), else the player presses while you watch; `breakpoint` |
 | 4 Control, isolate | **signals only**: find the input word and object table; `mem_write` silencing tests | `input_route`, `adapter_try` |
 | 5 Environment | **signals only**: find the collision data, describe it in a format description, validate | `format_try`, `state_extract`, `adapter_try`, `adapter_test` |
 | 6 Presentation | **signals only**: find skeleton/mesh data | `render_preview`, `state_extract`; generic `skeleton` drawing in the world window |
@@ -72,12 +72,14 @@ not close the step: its closing check needs the missing tool. Mark such a step *
    declared RAM regions. Never route around `mem_write`'s refusal to write code while PCSX2 runs:
    doing that crashed PCSX2. (src: docs/reference/LOCUS_Master_v1.7.md §30.2)
 7. **Never report an unperformed test as passed.** A step closes only on a passed Proving Ground
-   scenario (the app's result, tied to the adapter hash) or the player's answer through
-   `ask_player` / `request_playtest`. Static reading, unit conversions and synthetic events are not
+   scenario (the app's result, tied to the adapter hash) or the player's answer in this
+   conversation, recorded with `evidence_record(player: …)`. Static reading, unit conversions and synthetic events are not
    tests of the character. Never substitute a LOCUS-made controller or composed frames for the
    game's own behaviour. (src: AGENTS.md)
-8. **Ask the player** for what only a human can judge: how the controls and camera feel, how he
-   looks and how big he is, how he sounds. Do not settle these from your own screenshots.
+8. **Ask the player, in this conversation,** for what only a human can judge: how the controls and
+   camera feel, how he looks and how big he is, how he sounds. Do not settle these from your own
+   screenshots. Record each answer verbatim with `evidence_record(player: "<their words>")`;
+   never answer for them. See [Working with the player](#working-with-the-player).
 9. **Publishing is the player's click** in Workbench ▸ Publish. Never upload, publish, push or
    share anything, and never ask to.
 10. **Approvals** (session start, memory writes) are given once per project in the app. If the
@@ -109,8 +111,9 @@ artefact ids, and what was **not** tested. Format: [templates/evidence-record.md
    start a new session: MCP servers load when a session starts. The player may allow the `locus-dev` tools in Claude Code's permissions so they
    are not asked for every call; the app's own approvals still apply.
    **Approvals**: a call that needs one (session start, memory writes) fails with the request id
-   (`apr-N`). The player either presses **Allow** in Workbench ▸ the project, or you ask
-   `ask_player(kind: confirm, approval: "apr-N", question: …)` and their yes grants it.
+   (`apr-N`). Only the player can grant it, with **Allow** in Workbench ▸ the project: ask them in
+   the conversation to press it, and call again once they say they have. A yes in the
+   conversation does not grant it.
 2. `system_info`, `runtimes`, `connectors`: record OS, CPU architecture, emulator version and
    architecture, connector version and its **vocabulary** (field types, object tables, hook
    templates, write operations, savestate parts, console decoders, presentation kinds). The adapter
@@ -125,14 +128,30 @@ artefact ids, and what was **not** tested. Format: [templates/evidence-record.md
    project and validates). Before writing, call `adapter_schema`: it returns a complete adapter
    that validates (Spyro), the section names, the JSON Schema per `section`, and each connector's
    vocabulary. Copy the shape, not the values. They hold facts only.
-6. **Questions to the player**: ask how they want to answer. **App** (default): `ask_player` /
-   `request_playtest`, answered in Workbench ▸ the project; the app records the answer. **Chat**:
-   ask in this conversation; record each reply verbatim with `evidence_record` (claim "player
-   answered in chat: …", the question, what they played) and in the sheet as "player (chat)". A
-   step closed on a chat answer says so. Never answer for them.
+6. Read [Working with the player](#working-with-the-player) before the first session.
 
 **Resuming** a project in a new conversation: read the investigation sheet, the step list and the
 last evidence records before any call; do not trust memory of earlier sessions.
+
+## Working with the player
+
+Everything you ask the player happens in this conversation; the app shows only approvals and
+your activity. (src: first Jak sessions, 9 October 2026: two recordings were lost because the
+instructions and the recording started together.)
+
+- **Before anything opens or closes**, say what will happen: "I will start a visible PCSX2
+  window now". Ask them to tell you if they cannot find it.
+- **Recordings the player plays into** (`mem_watch`, snapshots around an action): first say
+  exactly what to do and for how long, then **wait for their "ready"** and end your turn. Start
+  the recording only after they answer, and say "recording now, N seconds" in the same reply.
+  One request per recording; never chain two without telling them.
+- **Each answer is evidence**: `evidence_record(claim, level, player: "<their words>")`, and in
+  the sheet "player (chat)". Ask one question at a time, in plain words, with the choices when
+  there are some.
+- **Long waits** (opening films, loading): say how long and what they will see; use the time for
+  research that needs no session. Ask early whether they have a save past the opening: the
+  session copies their memory cards, so "Load game" can skip a long film.
+- **Before moving on** between sessions or steps, say what you closed, what is blocked and why.
 
 ## The procedure
 
@@ -144,9 +163,11 @@ closing check is in the app's record.
 
 - **Do**: `game_identify(path)` on the image the player names. If they own several regions, prefer
   the build public research targets (Spyro was switched from PAL to US for this; for Jak, OpenGOAL
-  targets NTSC-U SCUS-97124) and confirm with `ask_player(choice)`.
+  targets NTSC-U SCUS-97124) and confirm the choice with the player.
 - **Record**: serial (SYSTEM.CNF), region, version, image SHA-1 and SHA-256, boot executable name,
-  size, CRC and SHA-256 (`game_identify` returns all of them); emulator version and architecture.
+  size, CRC, SHA-256 and XXH64 (`game_identify` returns all of them); emulator version and
+  architecture. Decompilation projects may tell pressings apart by a boot ELF hash (OpenGOAL: XXH64
+  in decimal); match it and record which pressing this is.
 - A file name's "Rev 1" and SYSTEM.CNF's `VER` are different labels (Jak's Rev 1 image says
   `VER = 1.00`). Pin by the hashes; record both labels as they are.
 - **Closed by**: fingerprints in `source.builds[]` and `adapter_validate` passing on the identity.
@@ -160,7 +181,7 @@ closing check is in the app's record.
   engine. For each: URL, licence, pinned commit, build it targets, what it gives.
 - **Record**: the sources table and a **route table**: for each of steps 3–13, a first route and a
   fallback (for example step 5: substitution from a format description, else the answer hook).
-- **Closed by**: the route table in the notes and the player's `ask_player(confirm)` on the plan.
+- **Closed by**: the route table in the notes and the player's yes to the plan.
 
 ### 2 Access
 
@@ -212,7 +233,7 @@ Technique: [techniques/object-tables.md](techniques/object-tables.md).
 - **Record**: table layout, bound, guards, classes kept, counts silenced.
 - **Closed by**: in the game level, 30 s of `mem_watch` on object states plus `screenshot(game)`
   showing nothing else acting, then (after step 5) the `isolation-idle` scenario; and the player's
-  `ask_player(play_and_report)`: "only pad A moves him; pads B and C do nothing".
+  the player's report: "only pad A moves him; pads B and C do nothing".
 - Keep weapons alive: a frozen wrench could not be thrown or swung. (src: MODLOG.md, wrench throw follow-up)
 
 ### 5 Environment
@@ -245,7 +266,7 @@ Technique: [techniques/presentation.md](techniques/presentation.md).
   has loaded. Compare `render_preview(model, animation, frame)` with `screenshot(game)` of the same
   frame.
 - **Record**: kind, hook sites, layouts, animations loaded in this level, texture pages.
-- **Closed by**: preview and game screenshot agree, then `ask_player(confirm)`: "Does he look right?
+- **Closed by**: preview and game screenshot agree, then the player's answer: "Does he look right?
   Is his size right beside the 1.8 m pole and the Ratchet silhouette?" Scale was judged by the
   owner against the other characters each time (Spyro: 90 % of Ratchet's drawn 1.41 m).
 - A scale change moves every distance: rerun the step-5, 9 and 11 scenarios.
@@ -256,7 +277,7 @@ Technique: [techniques/presentation.md](techniques/presentation.md).
   axis toward him, orthonormal; it must change when only the camera moves) and declare
   `presentation.camera.kind = "captured"`; otherwise declare a LOCUS camera. His stick is relative
   to the camera his game thinks it has, so a captured camera must be the one shown.
-- **Closed by**: the `camera-forward` scenario, and `request_playtest` with the question "do the
+- **Closed by**: the `camera-forward` scenario, and a playtest with the question "do the
   stick directions feel right?". Record the field of view if found (Ratchet's is not matched).
 
 ### 8 Items, companions, effects
@@ -281,7 +302,7 @@ Technique: [techniques/attacks.md](techniques/attacks.md).
   anchored on a bone, object or the body, sized from his model.
 - **Closed by**: per attack, `dummy-<attack>` (exactly one hit per swing at 1 m) and
   `dummy-<attack>-miss` (none out of reach or facing away); `no-false-hits` (20 s of walking,
-  jumping and landing beside the dummy, zero hits); then `request_playtest` in the arena: "does a
+  jumping and landing beside the dummy, zero hits); then a playtest in the arena: "does a
   hit register only when it visibly connects?"
 
 ### 10 Hurt, death, respawn
@@ -316,7 +337,7 @@ Technique: [techniques/sound.md](techniques/sound.md).
   sound memory in a savestate (`state_extract(state, "spu")`), described as data and decoded by the
   connector. Label sound ids by the action that plays them.
 - **Closed by**: `sound-triggers` (a jump gives his jump id within 0.5 s in `bus_trace`), then
-  `ask_player(play_and_report)`: "Jump, attack, let the dummy hit you: do you hear his jump, swing
+  the player's report: "Jump, attack, let the dummy hit you: do you hear his jump, swing
   and hurt, and nothing from the level?" Record the answer per sound. Never unmute or capture the
   emulator's audio.
 
@@ -335,7 +356,7 @@ Technique: [techniques/ready-state.md](techniques/ready-state.md).
 ### 14 Adapter and playtest
 
 - **Do**: `adapter_validate` (explain or fix every warning), `adapter_test` (every scenario, from a
-  cold ready state), `request_playtest` in the Proving Ground, with another installed character if
+  cold ready state), a playtest in the Proving Ground, with another installed character if
   there is one. Players reach Piazza only online; say so if the player asks to try it there.
   Fill [templates/final-report.md](templates/final-report.md) and give it to the player.
 - **Closed by**: all scenarios passed on the final adapter hash and the player's playtest answer.
@@ -383,20 +404,20 @@ may rename some. Use the mapping you recorded before step 0.
 | --- | --- | --- |
 | Setup | `system_info`, `runtimes`, `connectors`, `notes_append` | — |
 | 0 Pin | `game_identify`, `disc_list`, `runtimes` | `adapter_validate` |
-| 1 Recon | web search (outside the app), `disc_list`, `disc_read`, `notes_append` | `ask_player(confirm)` |
+| 1 Recon | web search (outside the app), `disc_list`, `disc_read`, `notes_append` | player's yes |
 | 2 Access | `session_start`, `input_script`, `screenshot(game)`, `session_log`, `session_status`, `state_save`, `state_load` | second session loads the state |
 | 3 Find | `mem_snapshot`, `mem_diff`, `mem_search`, `mem_watch`, `mem_pointer_scan`, `mem_read`, `input_script`, `code_disassemble`, `code_xrefs`, `breakpoint` (DuckStation only) | `mem_watch` in a second session |
-| 4 Control, isolate | `input_route`, `input_press`, `mem_read`, `mem_write`, `adapter_try` | `world_scenario`, `ask_player` |
+| 4 Control, isolate | `input_route`, `input_press`, `mem_read`, `mem_write`, `adapter_try` | `world_scenario`, player's report |
 | 5 Environment | `format_try`, `disc_read`, `state_extract`, `adapter_try`, `world_start(proving_ground)`, `world_spawn` | `adapter_test` |
-| 6 Presentation | `state_extract`, `code_disassemble`, `render_preview`, `screenshot` | `ask_player(confirm)` |
-| 7 Camera | `mem_search`, `mem_watch`, `adapter_try` | scenario, `request_playtest` |
-| 8 Items | `mem_read`, `mem_watch`, `adapter_try` | scenarios, `ask_player` |
-| 9 Attacks | `input_script`, `mem_watch`, `world_dummy(stand)`, `bus_tail`, `bus_trace` | `adapter_test`, `request_playtest` |
-| 10 Hurt | `world_dummy(attack_*)`, `mem_watch`, `bus_trace`, `adapter_try` | `adapter_test`, `ask_player` |
+| 6 Presentation | `state_extract`, `code_disassemble`, `render_preview`, `screenshot` | player's yes |
+| 7 Camera | `mem_search`, `mem_watch`, `adapter_try` | scenario, playtest in chat |
+| 8 Items | `mem_read`, `mem_watch`, `adapter_try` | scenarios, player's report |
+| 9 Attacks | `input_script`, `mem_watch`, `world_dummy(stand)`, `bus_tail`, `bus_trace` | `adapter_test`, playtest in chat |
+| 10 Hurt | `world_dummy(attack_*)`, `mem_watch`, `bus_trace`, `adapter_try` | `adapter_test`, player's report |
 | 11 Others solid | `world_dummy(walk_path)`, `adapter_try`, `bus_trace` | `adapter_test` |
-| 12 Sound | `mem_watch`, `disc_read`, `state_extract(spu)`, `format_try`, `bus_trace` | scenario, `ask_player(play_and_report)` |
+| 12 Sound | `mem_watch`, `disc_read`, `state_extract(spu)`, `format_try`, `bus_trace` | scenario, player's report |
 | 13 Ready state | `session_stop`, `session_start`, `input_script`, `state_save`, `adapter_try` | two cold runs, `adapter_test` |
-| 14 Adapter | `adapter_schema`, `adapter_write`, `adapter_validate`, `adapter_test`, `request_playtest`, `evidence_record` | scenarios + player |
+| 14 Adapter | `adapter_schema`, `adapter_write`, `adapter_validate`, `adapter_test`, `evidence_record` (playtest in chat) | scenarios + player |
 | Any | `evidence_record`, `notes_append`, `world_reset`, `session_stop` | — |
 
 ## Files

@@ -63,5 +63,5 @@ level's bank is shipped locally, Piazza only plays what is triggered.
 
 - `sound-triggers`: jump, attack, hurt in the Proving Ground; `bus_trace` shows his ids within
   0.5 s, none from silenced objects.
-- `ask_player(play_and_report)`: hear each; record the answer per sound. Until then the sound step
+- Ask the player to play and listen: hear each; record the answer per sound. Until then the sound step
   is "built, not heard". (pitfall 45)

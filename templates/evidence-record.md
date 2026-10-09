@@ -27,7 +27,7 @@ Rules:
 - One claim per record; numbers, not adjectives.
 - `LOCUS reproduced` needs artefacts from this project's sessions or the player's own files.
 - `documented` names the source, its licence and pinned commit; no copied text beyond a field name.
-- A player's answer is evidence: cite the `ask_player` or `request_playtest` id and quote the answer
+- A player's answer is evidence: record it with `evidence_record(player: …)` and quote the answer
   briefly.
 - A disproved claim is never deleted: add a record that disproves it.
 

@@ -20,6 +20,11 @@ to expect. Facts with a `src:` are LOCUS reproduced unless marked otherwise.
   its data from `<datapath>/PCSX2`). Only `inis/PCSX2.ini` is edited: PINE on with the session's
   slot, a relative BIOS folder made absolute, muted, hidden renderer as below. PCSX2 older than 2.7
   is refused. (src: crates/locus-dev/src/session.rs)
+- What a research session changes, and says so in `session_start`'s `changed_for_this_session`:
+  a **software renderer** (`Renderer = 13`) becomes the hardware one when the session draws
+  (`software_renderer: true` keeps it); a visible window opens at PCSX2's default place on the
+  main display (saved window positions are dropped: one opened maximised on another display).
+  Hidden sessions report `hidden: true|false`: if false, tell the player and record it.
 - Play sessions (the connector), as follows.
 
 - A copy of the player's profile under the run folder, started with `-datapath <run>` and

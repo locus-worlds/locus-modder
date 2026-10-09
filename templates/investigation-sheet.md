@@ -44,7 +44,7 @@ Route table:
 | 12 Sound | | | |
 | 13 Ready state | | | |
 
-Player's approval of the plan: <ask_player id, answer>.
+Player's approval of the plan: <evidence record, their words>.
 
 ## S2 Access
 

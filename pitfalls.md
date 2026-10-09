@@ -50,6 +50,16 @@ diagnosis names the settings file PCSX2 loaded; PCSX2 2.7+; the player quits PCS
 choosing a BIOS. Fixed in `locus-dev` the same day; if it recurs, report the diagnosis to the
 player rather than working around it. (src: crates/locus-dev/src/session.rs)
 
+**7b. The game runs slowly in a research session.**
+Symptom: the game's own frame counter advances well under 60 a second; the player sees slow
+motion. Causes met (Jak, 9 October): the player's PCSX2 used the software renderer (research
+sessions now switch it); a maximised 4K window. Check: measure with the game's frame counter, idle
+and moving, and record it with the renderer `session_start` reports.
+
+**7c. A "hidden" session shows a window.**
+Symptom: a black PCSX2 window appears. Cause (fixed 9 October): the hide loop mistook "no app yet"
+for the app. Check: `session_start`'s `hidden` is true; if not, tell the player.
+
 ## Finding fields (step 3)
 
 **8. A guessed byte with two meanings.**
@@ -85,6 +95,12 @@ fingerprints; prefer the build public research targets. (src: investigations/spy
 Symptom: the wrong pad drives the character, or two pads do. Cause: emulator binds by enumeration
 order (PCSX2 swapped it). Check: hide every other device; ask the player to try each pad.
 (src: MODLOG.md, Trial10 correction)
+
+**13a. Writes to the pad record do nothing.**
+Symptom: `input_press` gives one action, then nothing; the stick does not move him. Cause (Jak 1):
+the game copies the controller into its pad record every frame before reading it, so outside
+writes are overwritten first. Check: one `input_press` with a `mem_watch` on the record; if the
+held value does not stay, input needs the connector's `pad_inject` template (or the player).
 
 **14. Input dropped without focus.**
 Symptom: the character ignores the pad when another window is in front. Cause: an input path that
