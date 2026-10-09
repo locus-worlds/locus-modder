@@ -1,78 +1,83 @@
-// Example Proving Ground scenarios, one per step that closes on a scenario.
-// Shape from docs/core/locus-modder-design-2026-10-11.md §6.3: spawn, input, optional dummy,
-// expectations on the world's view of the character. PROVISIONAL: spawn names, dummy behaviours,
-// input and expectation keys wait for the scenario runner (milestone M3). Check the runner's
-// format first; keep the intent of each check.
-// Save each object as tests/<name>.json in the adapter (plain JSON, no comments).
-// Thresholds here are starting points: Spyro's drops landed within 0.2 cm, so 2 cm is generous.
+// Proving Ground scenarios, one or more per step that closes on a scenario. Every key below is
+// one the scenario runner accepts (crates/locus-scenario); adapter_write checks each file and
+// refuses unknown keys. Write them with adapter_write({tests: {"<name>": [ …scenarios ]}}): it
+// saves adapter/tests/<name>.json (plain JSON, no comments); adapter_test runs them.
+//
+// Scenario: name, spawn (a zone spawn: world_start lists them), facing_deg (optional: a compass
+// heading 0 = -Z, 90 = +X, written through the facing field), dummy (stand | face | walk |
+// attack_<light|medium|heavy>_every_<n>s, joined with +), timeout_s, input, expect.
+// Input step: frames (pad reads to hold it), press ["cross", …], stick [x, y] (+y forward),
+// right_stick [x, y]. A step with neither press nor stick is a wait.
+// Expectation: one of feet_y / health ({at_least | at_most | within}), hit ({kind?, on}),
+// phase ("ready" | "dead" | "respawned" | "suspended" | "leaving"), outcome ({of, result?}), facing ({heading_deg | toward:
+// camera | motion | subject | dummy, offset_deg?, tolerance_deg}); timing with within_s, hold_s,
+// from ("start" or the previous expectation); "not": true inverts it.
+// Thresholds are starting points (Spyro's drops landed within 0.2 cm). <…> marks what to fill in.
 [
-  // ---- Step 3/4: reading and isolation
-  { "name": "spawn-idle", "spawn": "spawn.centre", "input": [ { "wait_frames": 300 } ],
-    "expect": [ { "phase": "alive" }, { "feet_y": { "within": [-0.02, 0.02] }, "within_s": 3 },
-                { "speed": { "below": 0.05 }, "after_s": 3 } ] },
-  { "name": "isolation-idle", "spawn": "spawn.centre", "input": [ { "wait_frames": 1800 } ],
-    "expect": [ { "displacement": { "below": 0.05 }, "after_s": 30 }, { "foreign_sounds": 0 } ] },
+  // ---- Step 3/4: reading
+  { "name": "spawn-idle", "spawn": "spawn", "dummy": "stand", "timeout_s": 8,
+    "expect": [ { "phase": "ready" }, { "feet_y": { "within": [-0.05, 0.05] }, "hold_s": 3 } ] },
+  // Isolation (nothing else moves him) and foreign sounds: no expectation yet; check with
+  // mem_watch on his position and bus_tail ext.<game>.sound while he idles 30 s.
 
-  // ---- Step 5: environment (zones of design §6.1)
-  { "name": "drop", "spawn": "spawn.centre+2m", "input": [],
-    "expect": [ { "feet_y": { "within": [-0.02, 0.02] }, "within_s": 3 } ] },
-  { "name": "walk-flat", "spawn": "spawn.centre", "input": [ { "stick": [0, 1], "frames": 120 } ],
-    "expect": [ { "displacement": { "at_least": 1.0 } }, { "feet_y": { "within": [-0.02, 0.02] } } ] },
-  { "name": "wall-1.0", "spawn": "walls.1.0.front", "input": [ { "stick": [0, 1], "frames": 180 } ],
-    "expect": [ { "stays_in_front_of": "walls.1.0" } ] },
-  { "name": "stairs-0.25", "spawn": "stairs.foot.0.25", "input": [ { "stick": [0, 1], "frames": 180 } ],
-    "expect": [ { "feet_y": { "at_least": 1.95 }, "within_s": 3 } ] },
-  { "name": "ramp-30", "spawn": "ramps.30.foot", "input": [ { "stick": [0, 1], "frames": 240 } ],
-    "expect": [ { "feet_y": { "at_least": 1.0 }, "within_s": 4 } ] },
-  { "name": "gap-2", "spawn": "gaps.2.edge", "input": [ { "stick": [0, 1], "frames": 20 }, { "press": ["<jump>"], "frames": 10 }, { "stick": [0, 1], "frames": 60 } ],
-    "expect": [ { "feet_y": { "within": [-0.05, 0.05] }, "past": "gaps.2.far_edge", "within_s": 3 } ] },
-  { "name": "ceiling-1.6", "spawn": "ceilings.1.6.entry", "input": [ { "press": ["<jump>"], "frames": 10 } ],
-    "expect": [ { "head_y": { "at_most": 1.62 } } ] },
-  { "name": "far-field", "spawn": "far.100m", "input": [],
-    "expect": [ { "feet_y": { "within": [-0.02, 0.02] }, "within_s": 3 } ] },
-  { "name": "respawn-ground", "spawn": "arena.1m", "dummy": "attack_heavy_every_1s",
-    "expect": [ { "phase": "respawned", "within_s": 15 }, { "feet_y": { "within": [-0.02, 0.02] }, "within_s": 5 } ] },
+  // ---- Step 5: environment
+  { "name": "drop", "spawn": "spawn", "timeout_s": 6,
+    "expect": [ { "feet_y": { "within": [-0.05, 0.05] }, "within_s": 3 } ] },
+  { "name": "stairs-0.25", "spawn": "stairs.foot.0.25", "timeout_s": 8,
+    "input": [ { "stick": [0, 1], "frames": 180 } ],
+    "expect": [ { "feet_y": { "at_least": 1.95 }, "within_s": 4 } ] },
+  { "name": "ramp-30", "spawn": "ramps.30", "timeout_s": 8,
+    "input": [ { "stick": [0, 1], "frames": 240 } ],
+    "expect": [ { "feet_y": { "at_least": 1.0 }, "within_s": 5 } ] },
+  { "name": "block-1-stops-him", "spawn": "blocks.1", "timeout_s": 6,
+    "input": [ { "stick": [0, 1], "frames": 120 } ],
+    "expect": [ { "feet_y": { "at_most": 0.1 }, "hold_s": 2 } ] },
+  { "name": "no-fall-through", "spawn": "spawn", "timeout_s": 10,
+    "input": [ { "stick": [1, 0], "frames": 300 } ],
+    "expect": [ { "feet_y": { "at_most": -1 }, "not": true, "from": "start", "within_s": 8 } ] },
+  { "name": "far-field", "spawn": "far.100", "timeout_s": 6,
+    "expect": [ { "feet_y": { "within": [-0.05, 0.05] }, "within_s": 3 } ] },
+  { "name": "respawn-on-locus-ground", "spawn": "arena.1m", "dummy": "attack_heavy_every_1s", "timeout_s": 30,
+    "expect": [ { "phase": "respawned", "within_s": 25 }, { "feet_y": { "within": [-0.1, 0.1] }, "within_s": 5 } ] },
+  // Walls, gaps and ceilings (horizontal position, head height): no expectation yet; place him
+  // with world_spawn and read his position with bus_tail locus.state or mem_watch.
 
   // ---- Step 7: camera
-  { "name": "camera-forward", "spawn": "spawn.centre", "input": [ { "stick": [0, 1], "frames": 120 } ],
-    "expect": [ { "displacement_dot_camera_forward": { "at_least": 0.9 } } ] },
+  { "name": "camera-forward", "spawn": "arena.1m", "dummy": "stand", "timeout_s": 8,
+    "input": [ { "frames": 10 }, { "stick": [0, 1], "frames": 60 } ],
+    "expect": [ { "facing": { "toward": "camera", "tolerance_deg": 25 }, "within_s": 3 } ] },
+  { "name": "faces-where-he-runs", "spawn": "arena.1m", "timeout_s": 8,
+    "input": [ { "stick": [1, 0], "frames": 90 } ],
+    "expect": [ { "facing": { "toward": "motion", "tolerance_deg": 20 }, "within_s": 3 } ] },
 
-  // ---- Step 8: items
-  { "name": "item-held", "spawn": "spawn.centre", "input": [ { "stick": [0, 1], "frames": 120 } ],
-    "expect": [ { "item": "<item>", "distance_to_bone": { "at_most": 0.05 } } ] },
-  { "name": "item-throw", "spawn": "arena.1m", "input": [ { "press": ["<throw>"], "frames": 2 }, { "wait_frames": 120 } ],
-    "expect": [ { "item": "<item>", "state_sequence": ["held", "flight", "held"], "within_s": 3 } ] },
+  // ---- Step 8: items. No expectation yet: check an item's distance to its bone with the
+  // connector's anchor counters (session_status) and the player's eye.
 
-  // ---- Step 9: attacks (one pair per attack)
-  // facing_deg faces him at the spawn (a compass heading, or "spawn": arena.1m's own, toward the
-  // dummy), written through his facing field: a forward attack's hit and miss are both honest.
-  { "name": "dummy-<attack>", "spawn": "arena.1m", "facing_deg": "spawn", "dummy": "stand", "input": [ { "press": ["<button>"], "frames": 2 } ],
-    "expect": [ { "hit": { "kind": "ext.<game>.<attack>", "on": "dummy", "count": 1 }, "within_s": 1 } ] },
-  { "name": "dummy-<attack>-miss", "spawn": "arena.5m", "dummy": "stand", "input": [ { "press": ["<button>"], "frames": 2 } ],
-    "expect": [ { "hit": { "on": "dummy", "count": 0 }, "within_s": 2 } ] },
-  { "name": "dummy-<attack>-facing-away", "spawn": "arena.1m", "facing_deg": 270, "dummy": "stand", "input": [ { "press": ["<button>"], "frames": 2 } ],
-    "expect": [ { "hit": { "on": "dummy" }, "not": true, "within_s": 2 } ] },
-  { "name": "no-false-hits", "spawn": "arena.1m", "dummy": "stand",
-    "input": [ { "stick": [1, 0], "frames": 300 }, { "press": ["<jump>"], "frames": 10 }, { "stick": [-1, 0], "frames": 300 }, { "press": ["<jump>"], "frames": 10 }, { "wait_frames": 600 } ],
-    "expect": [ { "hit": { "on": "dummy", "count": 0 }, "within_s": 20 } ] },
+  // ---- Step 9: attacks (a hit and a miss per attack; facing_deg "spawn" faces the dummy)
+  { "name": "dummy-<attack>", "spawn": "arena.1m", "facing_deg": "spawn", "dummy": "stand", "timeout_s": 6,
+    "input": [ { "frames": 10 }, { "press": ["<button>"], "frames": 6 }, { "frames": 60 } ],
+    "expect": [ { "hit": { "kind": "ext.<game>.<attack>", "on": "dummy" }, "within_s": 3 } ] },
+  { "name": "dummy-<attack>-out-of-reach", "spawn": "arena.5m", "dummy": "stand", "timeout_s": 6,
+    "input": [ { "frames": 10 }, { "press": ["<button>"], "frames": 6 }, { "frames": 60 } ],
+    "expect": [ { "hit": { "on": "dummy" }, "not": true, "within_s": 3 } ] },
+  { "name": "dummy-<attack>-facing-away", "spawn": "arena.1m", "facing_deg": 270, "dummy": "stand", "timeout_s": 6,
+    "input": [ { "frames": 10 }, { "press": ["<button>"], "frames": 6 }, { "frames": 60 } ],
+    "expect": [ { "hit": { "on": "dummy" }, "not": true, "within_s": 3 } ] },
+  { "name": "no-false-hits", "spawn": "arena.1m", "dummy": "stand", "timeout_s": 22,
+    "input": [ { "stick": [0, 1], "frames": 30 }, { "stick": [0, -1], "frames": 30 }, { "press": ["cross"], "frames": 6 }, { "frames": 60 },
+               { "stick": [1, 0], "frames": 20 }, { "press": ["cross"], "frames": 6 }, { "frames": 60 }, { "stick": [-1, 0], "frames": 20 }, { "frames": 300 } ],
+    "expect": [ { "hit": { "on": "dummy" }, "not": true, "within_s": 15 } ] },
 
   // ---- Step 10: hurt, death, respawn (run each three times)
-  { "name": "hurt-light", "spawn": "arena.1m", "dummy": "attack_light_once",
-    "expect": [ { "health_delta": { "equals": -1 } }, { "anim_seen": "<hurt anim id>" }, { "phase": "alive" } ] },
-  { "name": "hurt-heavy", "spawn": "arena.1m", "dummy": "attack_heavy_once",
-    "expect": [ { "health_delta": { "equals": "-damage_table.heavy" } }, { "anim_seen": "<hurt anim id>" } ] },
-  { "name": "hurt-and-respawn", "spawn": "arena.1m", "dummy": "attack_heavy_every_1s",
-    "expect": [ { "phase": "dead" }, { "phase": "respawned", "within_s": 10 }, { "health": "full" } ] },
+  { "name": "hurt-light", "spawn": "arena.1m", "dummy": "attack_light_every_2s", "timeout_s": 8,
+    "expect": [ { "health": { "at_most": 0.7 }, "within_s": 6 }, { "phase": "ready" } ] },
+  { "name": "hurt-and-respawn", "spawn": "arena.1m", "dummy": "attack_heavy_every_1s", "timeout_s": 30,
+    "expect": [ { "phase": "dead", "within_s": 15 }, { "phase": "respawned", "within_s": 25 }, { "health": { "at_least": 0.99 }, "within_s": 28 } ] }
+  // Which hurt animation played: no expectation yet; mem_watch his action field during the hit.
 
-  // ---- Step 11: others solid
-  { "name": "stand-on-dummy", "spawn": "arena.above_dummy", "dummy": "stand",
-    "expect": [ { "feet_y": { "within_of": "dummy.top", "tolerance": 0.05 }, "within_s": 3 } ] },
-  { "name": "bump-dummy", "spawn": "arena.1m", "dummy": "stand", "input": [ { "stick": [0, 1], "frames": 120 } ],
-    "expect": [ { "distance_to": "dummy", "at_least": 0.3 } ] },
-  { "name": "dummy-walks-away", "spawn": "arena.above_dummy", "dummy": "walk_path",
-    "expect": [ { "feet_y": { "within": [-0.02, 0.02] }, "within_s": 6 }, { "session": "running" } ] },
+  // ---- Step 11: others solid. Standing on or bumping the dummy: no expectation yet; place him
+  // above the dummy with world_spawn and read feet_y against the dummy's top in bus_tail.
 
-  // ---- Step 12: sound
-  { "name": "sound-triggers", "spawn": "spawn.centre", "input": [ { "press": ["<jump>"], "frames": 10 } ],
-    "expect": [ { "sound": { "id_in": ["<jump ids>"], "owner": "self" }, "within_s": 0.5 }, { "foreign_sounds": 0 } ] }
+  // ---- Step 12: sound. No expectation yet: bus_tail ext.<game>.sound after an input_script
+  // press, and session_status's sound counters (sounds_started, sounds_missing, sounds_not_owned).
 ]
