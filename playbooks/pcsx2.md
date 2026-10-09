@@ -134,11 +134,11 @@ to expect. Facts with a `src:` are LOCUS reproduced unless marked otherwise.
   adapter's `pad_inject` with `pc` and `expect` (the word there), the `original` words it replaces
   up to and including the delay slot, which register holds the buffer and the bytes read
   (`buffer`, `count`), where the port is (a register or a word of the buffer), the `layout`
-  offsets of buttons and sticks, and `storage` (4 KB aligned, 0x1040 bytes) in a range that is
-  zero in your states, declared as a writable region. Then `session_start(input: true)` and one
-  `input_script` step while `mem_watch` reads the game's own pad record. Record that the storage
-  range stayed zero over a long session before trusting it.
-  (src: docs/core/m1-pcsx2-generic.md "Input")
+  offsets of buttons and sticks, and where it lives: `storage` (4 KB aligned, 0x1040 bytes) in a
+  range that is zero in your states, declared as a writable region, or `"pool"` (the hook pool,
+  below). Then `session_start(input: true)` and one `input_script` step while `mem_watch` reads
+  the game's own pad record. Record that the storage range stayed zero over a long session before
+  trusting it. (src: docs/core/m1-pcsx2-generic.md "Input")
 - **`answer_query`, cache form** (9 October, Jak 1; vocabulary 0.5): LOCUS's world answered at the
   entry of the routine that fills the game's collision cache. `session_start(hooks: true)` puts
   it in the session's guest patch with every other hook the adapter declares (pad, call), one
@@ -149,11 +149,39 @@ to expect. Facts with a `src:` are LOCUS reproduced unless marked otherwise.
   still hold the game's own word), so nothing is written there before the routine is loaded and
   nothing after it is patched. Conditional lines skip only extended lines, never `word` lines.
   Checked live: the site read `j hook` after a state load. (src: docs/core/jak-collision-answer-2026-10-09.md)
+- **Finding free memory** (`mem_free_pages`): every guest-patch hook needs pages nothing else
+  uses, and data written over PINE must never share a 4 KB page with code. Survey every state you
+  have (`mem_free_pages(states: [...])`; each state's RAM is read whole, below the executable too)
+  and add a live window while the character moves (`live_s: 120`, `input: [...]` steps as
+  `input_script` takes them, in a session started from another state). It leaves out the
+  console kernel's first 512 KB and the boot executable's sections, and lists runs of pages that
+  stayed zero, largest first, with how many sources held them and cautions. **Zero is not
+  unused**: pages above the executable are usually inside a heap (allocated later), the end of
+  RAM holds a stack, and a level load or film can fill pages every state shows empty. Prefer pages
+  below the executable or outside every heap's bounds (read the allocator's pointers), seen zero
+  in several states and a live window. After the hooks are in, survey the rest of the region again
+  and read the pool's pages back: only LOCUS's bytes may be there.
+- **The hook pool** (vocabulary 0.6): one free range for every guest-patch hook, so three hooks
+  need two pages, not six. Declare it once, `memory.hook_pool: {"code": {"from", "to"}, "data":
+  {"from", "to"}}` (whole pages, apart, inside writable regions), and give each `pad_inject`,
+  `answer_query` (cache form) and `call_function` hook `"storage": "pool"`. LOCUS lays their
+  code out in the code range (each a slot of its template's upper bound) and their data in the
+  data range (pad and answer control words 0x40 bytes each, a call hook 0x400 plus its
+  `record_bytes`); an answer buffer with `"buffer": "pool"` follows the data when it fits.
+  `adapter_validate` says how many bytes a range lacks; `connectors` lists the slot sizes. A hook
+  with an address as `storage` keeps its own two pages beside the pool; `copy_on_execute` always
+  does (it is installed in a play state). (src: docs/core/hook-pool-2026-10-09.md)
 - **Buffers in a heap's free tail**: when no static range is free, a heap's unused tail can hold
   a buffer if the hook and LOCUS both check the heap's pointers first (`admit`: its `current` at
   most the buffer's start, its `top` at least the buffer's end) and fall back to the game's own
   routine when they fail. Record the pointers before and after a long session.
 - **`log_call`**: not built; polling a table was enough for sound.
+- **No hook for the pose** (vocabulary 0.6): when the game keeps its joints' matrices in memory
+  after its own joint math (a bones array under the character's process, joint-to-world in the
+  game's units), `presentation.pose.from_memory` reads them each frame from a `ptr` field, and
+  `presentation.model.description` builds the model from EE memory (`ee_memory`: the play state's
+  at launch, the running game's in `adapter_try`). See [presentation](../techniques/presentation.md#pose).
+  (src: docs/core/jak-merc-skeleton-2026-10-09.md)
 
 ## Observe, don't time
 

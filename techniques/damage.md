@@ -42,19 +42,31 @@ in it is data you find; the template's code is LOCUS's (`connectors` shows its l
    be the pad hook's own `pc`. `original` is the epilogue's words, `expect` the first.
 4. **The record from the hit.** In `entity.apply_damage`: `{"call": {"hook": …, "record":
    {name: {at: "+0x…", type, value}}, "refused_when": […]}}`. Values: constants, `damage`,
-   `direction.x|y|z` (attacker to target, his native axes) with `scale` (a knockback length),
+   `direction.x|y|z` (attacker to target, his native axes) with `scale` (a knockback length;
+   the game reads it only if the record says it carries a direction: set that flag, or the game
+   knocks him back by its own default, often along his own facing),
    `source.x|y|z`, `tier` with `table` (one constant per tier: light, medium, heavy, lethal),
    `record` with `add` (a pointer into the record itself), `field:<name>`.
 5. **His own rule decides.** `refused_when` lists the function's answers that mean "not hurt"
-   (invulnerable, already hurt); those outcomes say so instead of claiming damage. How much a hit
+   (invulnerable, already hurt), each a value or `{"value": …, "why": "invulnerable after a hit"}`;
+   their outcomes are `refused` with the reason, never `applied`. A call the hook does not make
+   (a loaded word held a `not` value: no character while the game re-makes him) is `refused` too,
+   naming the word. How much a hit
    takes is often his game's own rule (one point per hit); declare `damage_table` to match it.
-6. **Give it storage of its own.** Two pages no other hook (and no answer buffer) uses, found zero
-   in your states and declared writable; the validator refuses overlapping storage and shared sites.
+6. **Give it memory.** Two pages of its own no other hook (and no answer buffer) uses, found zero
+   in your states (`mem_free_pages`) and declared writable; or, with other guest-patch hooks,
+   `"storage": "pool"` in the adapter's hook pool (its code in the pool's code page, its data,
+   0x400 bytes plus the record, in the data page: [the PCSX2 playbook](../playbooks/pcsx2.md)).
+   The validator refuses overlapping storage and shared sites.
 7. **Install it.** The hook is a guest patch: start research sessions with `session_start(hooks:
    true)` (every hook the adapter declares; `input: true` does the same); `adapter_try` notes a call hook missing from the game.
 
 Check it as below, and watch his hurt state and health on the call's frame; a hit inside his
-invulnerability must be refused, not counted.
+invulnerability must be refused, not counted. Check the knockback's direction too: place him with
+the dummy on one side (`world_spawn … facing_deg`), let it hit him facing it and facing away, and
+read his position before and 1-2 s after each hit (the scenario's recording): he should move away
+from the dummy both times. If he moves the same way whichever side the dummy is on, his game is
+not reading the direction (a flag in the record, or an attacker it expects).
 (src: docs/core/damage-call-hook-2026-10-09.md)
 
 ## Only reactions the level can play

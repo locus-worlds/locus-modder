@@ -44,10 +44,14 @@
     "expect": [ { "item": "<item>", "state_sequence": ["held", "flight", "held"], "within_s": 3 } ] },
 
   // ---- Step 9: attacks (one pair per attack)
-  { "name": "dummy-<attack>", "spawn": "arena.1m", "dummy": "stand", "input": [ { "press": ["<button>"], "frames": 2 } ],
+  // facing_deg faces him at the spawn (a compass heading, or "spawn": arena.1m's own, toward the
+  // dummy), written through his facing field: a forward attack's hit and miss are both honest.
+  { "name": "dummy-<attack>", "spawn": "arena.1m", "facing_deg": "spawn", "dummy": "stand", "input": [ { "press": ["<button>"], "frames": 2 } ],
     "expect": [ { "hit": { "kind": "ext.<game>.<attack>", "on": "dummy", "count": 1 }, "within_s": 1 } ] },
   { "name": "dummy-<attack>-miss", "spawn": "arena.5m", "dummy": "stand", "input": [ { "press": ["<button>"], "frames": 2 } ],
     "expect": [ { "hit": { "on": "dummy", "count": 0 }, "within_s": 2 } ] },
+  { "name": "dummy-<attack>-facing-away", "spawn": "arena.1m", "facing_deg": 270, "dummy": "stand", "input": [ { "press": ["<button>"], "frames": 2 } ],
+    "expect": [ { "hit": { "on": "dummy" }, "not": true, "within_s": 2 } ] },
   { "name": "no-false-hits", "spawn": "arena.1m", "dummy": "stand",
     "input": [ { "stick": [1, 0], "frames": 300 }, { "press": ["<jump>"], "frames": 10 }, { "stick": [-1, 0], "frames": 300 }, { "press": ["<jump>"], "frames": 10 }, { "wait_frames": 600 } ],
     "expect": [ { "hit": { "on": "dummy", "count": 0 }, "within_s": 20 } ] },

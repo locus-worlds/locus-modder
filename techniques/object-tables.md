@@ -15,8 +15,28 @@ to borrow objects as proxies.
    pointer, owner, scale, collision link. Compare entries of known objects (a crate, an enemy).
 4. Bound: count live entries; find what marks the end (empty slots, a count, a list terminator).
 5. Lists: follow `next` pointers from a global head; check the list closes.
+6. Trees and pointer slots: some engines link objects through a slot that holds the object's
+   address (a "pointer to a pointer"), and keep children and siblings (a process tree). Read one
+   link by hand: if the word at the link is not a record but points at a word that is, the link
+   takes two reads. Check the self-slot (a record whose slot points back at it).
 
 Decompilations name these tables; confirm live.
+
+## Declaring them
+
+| Table | `memory.objects.<name>` |
+| --- | --- |
+| Array | `at`, `stride`, `count` (and `end` or `stop`) |
+| List | `next: "+0x10"`: the word at +0x10 is the next record |
+| List through slots | `next: ["+0xC", "+0x0"]`: the word at +0xC, then the word it points at (+0x0) is the next record; up to 4 reads (vocabulary 0.6) |
+| Tree | `next` (the sibling) and `child: ["+0x10", "+0x0"]` (the first child), walked depth first from `at`: a record, its children, then its sibling (vocabulary 0.6) |
+| A language's null | `null: ["0x…"]`: words that end a chain besides 0 (a Lisp's false symbol, a sentinel) |
+
+Every walk reads each record once (a link back to a record already read ends that branch) and at
+most `count` records; a link outside the adapter's regions ends it. Records start at the address
+the chain gives; their fields are `+0x…` from there. Choose what you keep with the table's `alive`
+test and `named` selections (`flags_any` / `flags_none` on a category mask, `in` on a class or
+type word), and check the walk with `mem_read` on two or three records before trusting it.
 
 ## Examples
 
@@ -33,7 +53,10 @@ Decompilations name these tables; confirm live.
 ## Silence by allow-list
 
 - Keep by class: the hero, his weapons and held items, projectiles, companions, effects. Silence
-  the rest. The adapter declares `world.silence` with `keep_classes` (provisional names).
+  the rest. The adapter declares `world.silence` with `keep_classes` (provisional names); a
+  tree's records are filtered by `alive` and `named` tests on their own fields (a category mask,
+  a class word). Silencing a walked list or tree is DuckStation's `free` only so far; on PCSX2,
+  declare the table to find and follow objects, and record silencing as not yet supported.
 - Prefer the game's own removal (its free routine's effect) to overwriting.
 - Stop exactly at the bound and guard each entry before writing (pitfall 17).
 - Thawing a frozen object hung Ratchet's game: build the silenced state from an unsilenced one.
