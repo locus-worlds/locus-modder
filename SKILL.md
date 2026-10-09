@@ -79,9 +79,11 @@ artefact ids, and what was **not** tested. Format: [templates/evidence-record.md
 
 1. List the MCP tools of the developer interface and compare them with the [tool
    reference](#tool-reference). Names may differ slightly; write the mapping you use into the notes
-   (`notes_append("setup", …)`). No developer interface: ask the player to enable it in Developer ▸
-   Workbench ▸ Agent and add the MCP configuration that page shows to Claude Code, then restart
-   your session. The player may allow the `locus-dev` tools in Claude Code's permissions so they
+   (`notes_append("setup", …)`). No developer interface: ask the player to open the LOCUS app's Developer ▸
+   Workbench, create (or open) the adapter project, and add the configuration its **Connect your
+   agent** card shows to Claude Code with `claude mcp add` (use `--scope user` when Claude Code
+   runs without a project folder, since a local server is registered for one folder only), then
+   start a new session: MCP servers load when a session starts. The player may allow the `locus-dev` tools in Claude Code's permissions so they
    are not asked for every call; the app's own approvals still apply.
 2. `system_info`, `runtimes`, `connectors`: record OS, CPU architecture, emulator version and
    architecture, connector version and its **vocabulary** (field types, object tables, hook
